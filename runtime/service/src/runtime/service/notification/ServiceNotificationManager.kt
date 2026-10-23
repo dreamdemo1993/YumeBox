@@ -24,6 +24,7 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.os.Bundle
 import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
@@ -262,6 +263,7 @@ class ServiceNotificationManager(
             .setShowWhen(false)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addExtras(substitutedAppName(presentation))
             .apply {
                 when (presentation) {
                     is NotificationPresentation.Running ->
@@ -275,6 +277,20 @@ class ServiceNotificationManager(
     }
 
     /**
+     * A custom big content view makes the expanded header fall back to the app label, so the
+     * profile name showed up twice: as "YumeBox" in the header and again as the body heading.
+     * The platform substitutes the header name with this extra (the mechanism Gmail and friends
+     * use for per-account notifications), which lets the body drop its own heading and keep the
+     * stock look. The extra is a hidden platform field, hence the literal key.
+     */
+    private fun substitutedAppName(presentation: NotificationPresentation): Bundle =
+        Bundle().apply {
+            if (presentation is NotificationPresentation.Running) {
+                putString(EXTRA_SUBSTITUTE_APP_NAME, presentation.title)
+            }
+        }
+
+    /**
      * The stop control is part of the expanded body rather than a notification action. ColorOS
      * renders an ongoing notification that carries an action in its expanded form, so an action put
      * the button on screen from the moment a session started — exactly what the folded entry must
@@ -282,7 +298,6 @@ class ServiceNotificationManager(
      */
     private fun expandedBody(presentation: NotificationPresentation.Running): RemoteViews =
         RemoteViews(service.packageName, R.layout.notification_expanded).apply {
-            setTextViewText(R.id.notification_expanded_title, presentation.title)
             setTextViewText(R.id.notification_expanded_usage, presentation.content)
             setTextViewText(R.id.notification_expanded_node, presentation.nodeLine)
             if (config.stopAction) {
@@ -353,6 +368,10 @@ class ServiceNotificationManager(
         // Stable per service: the notification is re-posted every tick, so the stop action must
         // resolve to the same PendingIntent instead of piling new ones up.
         private const val STOP_REQUEST_CODE = 2001
+
+        // Notification.EXTRA_SUBSTITUTE_APP_NAME is a hidden platform field, so the key is spelled
+        // out. SystemUI shows this string instead of the app label in the notification header.
+        private const val EXTRA_SUBSTITUTE_APP_NAME = "android.substName"
 
         val vpnConfig =
             Config(
