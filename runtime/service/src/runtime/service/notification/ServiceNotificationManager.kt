@@ -24,7 +24,10 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.os.Bundle
 import android.os.SystemClock
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -36,6 +39,7 @@ import com.github.yumeyucca.yumebox.domain.model.resolvePrimaryNode
 import com.github.yumeyucca.yumebox.domain.model.toInfo
 import com.github.yumeyucca.yumebox.runtime.api.Components
 import com.github.yumeyucca.yumebox.runtime.api.CoreApi
+import com.github.yumeyucca.yumebox.runtime.service.ProxyStopReceiver
 import com.github.yumeyucca.yumebox.runtime.service.R
 import com.github.yumeyucca.yumebox.runtime.service.config.ServiceStore
 import com.github.yumeyucca.yumebox.runtime.service.core.CoreProcess
@@ -61,6 +65,8 @@ class ServiceNotificationManager(
         val notificationId: Int,
         val channelId: String,
         val channelName: String,
+        /** Adds the "stop" action that ends the session serving this notification. */
+        val stopAction: Boolean = true,
     )
 
     private val serviceStore by lazy { ServiceStore() }
@@ -249,7 +255,6 @@ class ServiceNotificationManager(
         return NotificationCompat.Builder(service, config.channelId)
             .setContentTitle(presentation.title)
             .setContentText(presentation.content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(presentation.expandedText))
             .setSmallIcon(smallIconRes())
             .setColor(service.getColor(R.color.color_yumebox))
             .setContentIntent(contentIntent)
@@ -258,8 +263,60 @@ class ServiceNotificationManager(
             .setShowWhen(false)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addExtras(substitutedAppName(presentation))
+            .apply {
+                when (presentation) {
+                    is NotificationPresentation.Running ->
+                        setCustomBigContentView(expandedBody(presentation))
+                    // Only the first frame of a session gets here, and it carries no figures.
+                    is NotificationPresentation.Status ->
+                        setStyle(NotificationCompat.BigTextStyle().bigText(presentation.expandedText))
+                }
+            }
             .build()
     }
+
+    /**
+     * A custom big content view makes the expanded header fall back to the app label, so the
+     * profile name showed up twice: as "YumeBox" in the header and again as the body heading.
+     * The platform substitutes the header name with this extra (the mechanism Gmail and friends
+     * use for per-account notifications), which lets the body drop its own heading and keep the
+     * stock look. The extra is a hidden platform field, hence the literal key.
+     */
+    private fun substitutedAppName(presentation: NotificationPresentation): Bundle =
+        Bundle().apply {
+            if (presentation is NotificationPresentation.Running) {
+                putString(EXTRA_SUBSTITUTE_APP_NAME, presentation.title)
+            }
+        }
+
+    /**
+     * The stop control is part of the expanded body rather than a notification action. ColorOS
+     * renders an ongoing notification that carries an action in its expanded form, so an action put
+     * the button on screen from the moment a session started — exactly what the folded entry must
+     * not do. Nothing in this layout is inflated until the user opens the entry.
+     */
+    private fun expandedBody(presentation: NotificationPresentation.Running): RemoteViews =
+        RemoteViews(service.packageName, R.layout.notification_expanded).apply {
+            setTextViewText(R.id.notification_expanded_usage, presentation.content)
+            setTextViewText(R.id.notification_expanded_node, presentation.nodeLine)
+            if (config.stopAction) {
+                setTextViewText(R.id.notification_expanded_stop, YumeTxt.Service.Notification.Stop)
+                setOnClickPendingIntent(R.id.notification_expanded_stop, stopIntent())
+            } else {
+                setViewVisibility(R.id.notification_expanded_stop, View.GONE)
+            }
+        }
+
+    // The chip goes to a manifest receiver, not to the service: a tap must still work when the
+    // service is being recreated, and it must not be redelivered as a start command.
+    private fun stopIntent(): PendingIntent =
+        PendingIntent.getBroadcast(
+            service,
+            STOP_REQUEST_CODE,
+            Intent(service, ProxyStopReceiver::class.java).setAction(ProxyStopReceiver.ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     // startForeground() must never trip before the first frame, so a preference read failure falls
     // back to the default logo.
@@ -307,6 +364,14 @@ class ServiceNotificationManager(
 
         // Resolving the node costs a core IPC listing all proxy groups.
         private const val CURRENT_NODE_REFRESH_MS = 2500L
+
+        // Stable per service: the notification is re-posted every tick, so the stop action must
+        // resolve to the same PendingIntent instead of piling new ones up.
+        private const val STOP_REQUEST_CODE = 2001
+
+        // Notification.EXTRA_SUBSTITUTE_APP_NAME is a hidden platform field, so the key is spelled
+        // out. SystemUI shows this string instead of the app label in the notification header.
+        private const val EXTRA_SUBSTITUTE_APP_NAME = "android.substName"
 
         val vpnConfig =
             Config(

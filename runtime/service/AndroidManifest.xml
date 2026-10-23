@@ -92,6 +92,10 @@
         </receiver>
 
         <receiver
+            android:name="com.github.yumeyucca.yumebox.runtime.service.ProxyStopReceiver"
+            android:exported="false"/>
+
+        <receiver
             android:name="com.github.yumeyucca.yumebox.runtime.service.RestartReceiver"
             android:exported="false">
             <intent-filter>

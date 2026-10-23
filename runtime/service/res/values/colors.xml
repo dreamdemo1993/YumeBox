@@ -23,4 +23,12 @@
 
 <resources>
     <color name="color_yumebox">#1E4376</color>
+
+    <!-- Expanded ongoing-notification body. RemoteViews is inflated outside the app theme, so the
+         day/night pair is spelled out here instead of relying on theme attributes. The action pair
+         mirrors the platform's own notification action button (filled capsule, muted label). -->
+    <color name="notification_expanded_primary">#DE000000</color>
+    <color name="notification_expanded_secondary">#99000000</color>
+    <color name="notification_expanded_action_bg">#14000000</color>
+    <color name="notification_expanded_action_text">#8A000000</color>
 </resources>
