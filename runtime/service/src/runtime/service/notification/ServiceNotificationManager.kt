@@ -36,6 +36,7 @@ import com.github.yumeyucca.yumebox.domain.model.resolvePrimaryNode
 import com.github.yumeyucca.yumebox.domain.model.toInfo
 import com.github.yumeyucca.yumebox.runtime.api.Components
 import com.github.yumeyucca.yumebox.runtime.api.CoreApi
+import com.github.yumeyucca.yumebox.runtime.service.ProxyStopReceiver
 import com.github.yumeyucca.yumebox.runtime.service.R
 import com.github.yumeyucca.yumebox.runtime.service.config.ServiceStore
 import com.github.yumeyucca.yumebox.runtime.service.core.CoreProcess
@@ -61,6 +62,8 @@ class ServiceNotificationManager(
         val notificationId: Int,
         val channelId: String,
         val channelName: String,
+        /** Adds the "stop" action that ends the session serving this notification. */
+        val stopAction: Boolean = true,
     )
 
     private val serviceStore by lazy { ServiceStore() }
@@ -258,8 +261,25 @@ class ServiceNotificationManager(
             .setShowWhen(false)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .apply { if (config.stopAction) addAction(stopAction()) }
             .build()
     }
+
+    // The action goes to a manifest receiver, not to the service: a tap must still work when the
+    // service is being recreated, and it must not be redelivered as a start command.
+    private fun stopAction(): NotificationCompat.Action =
+        NotificationCompat.Action.Builder(
+                R.drawable.ic_stop_service,
+                YumeTxt.Service.Notification.Stop,
+                PendingIntent.getBroadcast(
+                    service,
+                    STOP_REQUEST_CODE,
+                    Intent(service, ProxyStopReceiver::class.java)
+                        .setAction(ProxyStopReceiver.ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            .build()
 
     // startForeground() must never trip before the first frame, so a preference read failure falls
     // back to the default logo.
@@ -307,6 +327,10 @@ class ServiceNotificationManager(
 
         // Resolving the node costs a core IPC listing all proxy groups.
         private const val CURRENT_NODE_REFRESH_MS = 2500L
+
+        // Stable per service: the notification is re-posted every tick, so the stop action must
+        // resolve to the same PendingIntent instead of piling new ones up.
+        private const val STOP_REQUEST_CODE = 2001
 
         val vpnConfig =
             Config(
