@@ -22,5 +22,6 @@
 <resources>
     <color name="notification_expanded_primary">#E6FFFFFF</color>
     <color name="notification_expanded_secondary">#A6FFFFFF</color>
-    <color name="notification_expanded_accent">#9DC3F0</color>
+    <color name="notification_expanded_action_bg">#24FFFFFF</color>
+    <color name="notification_expanded_action_text">#CCFFFFFF</color>
 </resources>
