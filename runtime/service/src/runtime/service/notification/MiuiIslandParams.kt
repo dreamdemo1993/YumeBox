@@ -42,8 +42,9 @@ object MiuiIslandParams {
     private val sequence = AtomicLong(System.currentTimeMillis() / 1000)
 
     /**
-     * @param promote true only for the first frame of an island session. That frame may expand once.
-     * Updates must stay collapsed; repeating the first-frame flags replays the appear animation.
+     * @param promote true only for the first frame of an island session, so an island that was
+     * dropped earlier is shown again. It deliberately no longer drives `islandFirstFloat`: see the
+     * note on that field below.
      */
     fun build(
         profileName: String,
@@ -60,7 +61,12 @@ object MiuiIslandParams {
                 put("business", BUSINESS)
                 put("protocol", 1)
                 put("orderId", BUSINESS)
-                put("islandFirstFloat", promote)
+                // Xiaomi's Super Island guide: islandFirstFloat decides whether the notification
+                // first appears in its expanded form (true) or as a summary (false). It defaults to
+                // true, which is what used to unfold the ongoing notification the moment a session
+                // started. The entry has to stay collapsed and let the user pull it open — that is
+                // the only place the "stop" action lives.
+                put("islandFirstFloat", false)
                 put("enableFloat", false)
                 put("updatable", true)
                 put("outEffectSrc", "")
