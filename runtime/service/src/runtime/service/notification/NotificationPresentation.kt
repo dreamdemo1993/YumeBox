@@ -38,6 +38,8 @@ internal sealed class NotificationPresentation {
         override val title: String,
         override val content: String,
         override val expandedText: String,
+        /** "current node" line shown in the expanded body, next to the stop chip. */
+        val nodeLine: String,
         val compactTraffic: String,
         val currentNode: String?,
     ) : NotificationPresentation()
@@ -59,10 +61,12 @@ internal object NotificationPresentationFactory {
     ): NotificationPresentation.Running {
         val usageLine = buildUsageLine(profile)
         val node = currentNode ?: YumeTxt.Service.Notification.NoNode
+        val nodeLine = YumeTxt.Service.Notification.CurrentNode.format(node)
         return NotificationPresentation.Running(
             title = profileName,
             content = usageLine,
-            expandedText = "$usageLine\n" + YumeTxt.Service.Notification.CurrentNode.format(node),
+            expandedText = "$usageLine\n$nodeLine",
+            nodeLine = nodeLine,
             compactTraffic = buildCompactTrafficLine(trafficNow),
             currentNode = currentNode,
         )

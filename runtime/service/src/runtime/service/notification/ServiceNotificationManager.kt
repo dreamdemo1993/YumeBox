@@ -25,6 +25,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.os.SystemClock
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -252,7 +254,6 @@ class ServiceNotificationManager(
         return NotificationCompat.Builder(service, config.channelId)
             .setContentTitle(presentation.title)
             .setContentText(presentation.content)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(presentation.expandedText))
             .setSmallIcon(smallIconRes())
             .setColor(service.getColor(R.color.color_yumebox))
             .setContentIntent(contentIntent)
@@ -261,25 +262,46 @@ class ServiceNotificationManager(
             .setShowWhen(false)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .apply { if (config.stopAction) addAction(stopAction()) }
+            .apply {
+                when (presentation) {
+                    is NotificationPresentation.Running ->
+                        setCustomBigContentView(expandedBody(presentation))
+                    // Only the first frame of a session gets here, and it carries no figures.
+                    is NotificationPresentation.Status ->
+                        setStyle(NotificationCompat.BigTextStyle().bigText(presentation.expandedText))
+                }
+            }
             .build()
     }
 
-    // The action goes to a manifest receiver, not to the service: a tap must still work when the
+    /**
+     * The stop control is part of the expanded body rather than a notification action. ColorOS
+     * renders an ongoing notification that carries an action in its expanded form, so an action put
+     * the button on screen from the moment a session started — exactly what the folded entry must
+     * not do. Nothing in this layout is inflated until the user opens the entry.
+     */
+    private fun expandedBody(presentation: NotificationPresentation.Running): RemoteViews =
+        RemoteViews(service.packageName, R.layout.notification_expanded).apply {
+            setTextViewText(R.id.notification_expanded_title, presentation.title)
+            setTextViewText(R.id.notification_expanded_usage, presentation.content)
+            setTextViewText(R.id.notification_expanded_node, presentation.nodeLine)
+            if (config.stopAction) {
+                setTextViewText(R.id.notification_expanded_stop, YumeTxt.Service.Notification.Stop)
+                setOnClickPendingIntent(R.id.notification_expanded_stop, stopIntent())
+            } else {
+                setViewVisibility(R.id.notification_expanded_stop, View.GONE)
+            }
+        }
+
+    // The chip goes to a manifest receiver, not to the service: a tap must still work when the
     // service is being recreated, and it must not be redelivered as a start command.
-    private fun stopAction(): NotificationCompat.Action =
-        NotificationCompat.Action.Builder(
-                R.drawable.ic_stop_service,
-                YumeTxt.Service.Notification.Stop,
-                PendingIntent.getBroadcast(
-                    service,
-                    STOP_REQUEST_CODE,
-                    Intent(service, ProxyStopReceiver::class.java)
-                        .setAction(ProxyStopReceiver.ACTION_STOP),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                ),
-            )
-            .build()
+    private fun stopIntent(): PendingIntent =
+        PendingIntent.getBroadcast(
+            service,
+            STOP_REQUEST_CODE,
+            Intent(service, ProxyStopReceiver::class.java).setAction(ProxyStopReceiver.ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
     // startForeground() must never trip before the first frame, so a preference read failure falls
     // back to the default logo.
