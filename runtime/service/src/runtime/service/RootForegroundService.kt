@@ -62,11 +62,15 @@ class RootForegroundService : Service(), CoroutineScope by CoroutineScope(Dispat
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onDestroy() {
+    private fun beginStopping() {
         notificationJob?.cancel()
         notificationJob = null
         notificationManager.release()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    }
+
+    override fun onDestroy() {
+        beginStopping()
         super.onDestroy()
         cancelAndJoinBlocking()
         cancel()
