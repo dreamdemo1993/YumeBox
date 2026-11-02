@@ -63,12 +63,21 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
         return START_REDELIVER_INTENT
     }
 
-    /** Drops the notification and ends this instance; the session is already stopped. */
-    internal fun finish() {
+    /**
+     * Removes the foreground notification as soon as a stop is requested. The service and core
+     * teardown continue afterwards; waiting for the child core to exit first leaves the shade
+     * showing a live session for up to the core's SIGTERM grace period.
+     */
+    internal fun beginStopping() {
         notificationJob?.cancel()
         notificationJob = null
         notificationManager.release()
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+    }
+
+    /** Drops the notification and ends this instance; the session is already stopped. */
+    internal fun finish() {
+        beginStopping()
         stopSelf()
     }
 
@@ -78,9 +87,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
     }
 
     override fun onDestroy() {
-        notificationJob?.cancel()
-        notificationJob = null
-        notificationManager.release()
+        beginStopping()
         RuntimeCoordinator.onVpnServiceDestroyed(this)
         super.onDestroy()
         cancelAndJoinBlocking()

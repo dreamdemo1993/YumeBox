@@ -132,6 +132,18 @@ object RuntimeCoordinator : RuntimeControl {
 
     override suspend fun stop(reason: String?) {
         startJob?.cancel()
+        // A reload waiting on (or already holding) the lifecycle lock would otherwise postpone the
+        // stop by a full compile-and-relaunch cycle.
+        reloadJob?.cancel()
+        // Drop the ongoing notification before the blocking core teardown. The foreground service
+        // itself stays alive until teardown completes, so the kernel tunnel and routes are still
+        // cleaned up in the same order as before.
+        withContext(Dispatchers.Main.immediate) {
+            activeVpn?.beginStopping()
+            if (_state.value.owner == RuntimeOwner.RootDaemon) {
+                RootForegroundService.stop(context)
+            }
+        }
         runOp { stopLocked(reason) }
     }
 
