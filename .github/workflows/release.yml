@@ -115,6 +115,8 @@ jobs:
 
   publish-r2-stable:
     name: R2 (Stable)
+    # Forks can publish GitHub releases without configuring the optional R2 mirror.
+    if: ${{ vars.R2_BUCKET != '' }}
     needs:
       - prepare-publish-stable-app
       - publish-release-stable
@@ -127,6 +129,7 @@ jobs:
 
   cleanup-artifacts:
     name: Cleanup
+    if: ${{ always() && needs.publish-release-stable.result == 'success' && (needs.publish-r2-stable.result == 'success' || needs.publish-r2-stable.result == 'skipped') }}
     needs:
       - publish-release-stable
       - publish-r2-stable
